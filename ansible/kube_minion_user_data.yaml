@@ -1,0 +1,128 @@
+#cloud-config
+
+coreos:
+  update:
+    reboot-strategy: best-effort
+  etcd2:
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    advertise-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    initial-cluster: master=http://172.31.10.135:2380
+    proxy: onfleet:
+      metadata: "role=node"
+    units:
+      - name: fleet.service
+        command: start
+      - name: flanneld.service
+        command: start
+        drop-ins:
+          - name: 50-network-config.conf
+            content: |
+              [Unit]
+              Requires=etcd2.service
+              [Service]
+              ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{"Network":"10.244.0.0/16", "Backend": {"Type": "vxlan"}}'
+      - name: docker.service
+        command: start
+      - name: setup-network-environment.service
+        command: start
+        content: |
+          [Unit]
+          Description=Setup Network Environment
+          Documentation=https://github.com/kelseyhightower/setup-network-environment
+          Requires=network-online.target
+          After=network-online.target
+
+          [Service]
+          ExecStartPre=-/usr/bin/mkdir -p /opt/bin
+          ExecStartPre=/usr/bin/curl -L -o /opt/bin/setup-network-environment -z /opt/bin/setup-network-environment https://github.com/kelseyhightower/setup-network-environment/releases/download/v1.0.0/setup-network-environment
+          ExecStartPre=/usr/bin/chmod +x /opt/bin/setup-network-environment
+          ExecStart=/opt/bin/setup-network-environment
+          RemainAfterExit=yes
+          Type=oneshot
+      - name: kube-proxy.service
+        command: start
+        content: |
+          [Unit]
+          Description=Kubernetes Proxy
+          Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+          Requires=setup-network-environment.service
+          After=setup-network-environment.service
+
+          [Service]
+          ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-proxy -z /opt/bin/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kube-proxy
+          ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy
+          # wait for kubernetes master to be up and ready
+          ExecStartPre=/opt/bin/wupiao 172.31.10.135 8080
+          ExecStart=/opt/bin/kube-proxy \
+          --master=172.31.10.135:8080 \
+          --logtostderr=true
+          Restart=always
+          RestartSec=10
+      - name: kube-kubelet.service
+        command: start
+        content: |
+          [Unit]
+          Description=Kubernetes Kubelet
+          Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+          Requires=setup-network-environment.service
+          After=setup-network-environment.service
+
+          [Service]
+          EnvironmentFile=/etc/network-environment
+          ExecStartPre=/usr/bin/curl -L -o /opt/bin/kubelet -z /opt/bin/kubelet https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kubelet
+          ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet
+          # wait for kubernetes master to be up and ready
+          ExecStartPre=/opt/bin/wupiao 172.31.10.135 8080
+          ExecStart=/opt/bin/kubelet \
+          --address=0.0.0.0 \
+          --port=10250 \
+          --hostname_override=${DEFAULT_IPV4} \
+          --api_servers=172.31.10.135:8080 \
+          --allow_privileged=true \
+          --logtostderr=true \
+          --cadvisor_port=4194 \
+          --healthz_bind_address=0.0.0.0 \
+          --healthz_port=10248
+          Restart=always
+          RestartSec=10
+    - name: authorized_keys.service
+      command: start
+      content: |
+          [Unit]
+          Description=Update authorized_keys
+
+          [Service]
+          Type=oneshot
+          ExecStartPre=/bin/sh -c "mkdir -p /home/core/.ssh && touch /home/core/.ssh/authorized_keys"
+          ExecStart=/bin/sh -c "curl -sSL --retry 5 --retry-delay 2 -o /tmp/authorized_keys.sha512 https://raw.githubusercontent.com/vnadgir-ef/public-keys/master/authorized_keys.sha512"
+          ExecStart=/bin/sh -c "curl -sSL --retry 5 --retry-delay 2 -o /tmp/authorized_keys https://raw.githubusercontent.com/vnadgir-ef/public-keys/master/authorized_keys"
+          ExecStart=/bin/sh -c "cd /tmp/ && sha512sum -c authorized_keys.sha512 && cp authorized_keys /home/core/.ssh/authorized_keys && chmod 700 /home/core/.ssh && chmod 600 /home/core/.ssh/authorized_keys && chown -R core:core /home/core/.ssh"
+    - name: authorized_keys.timer
+      command: start
+      content: |
+          [Unit]
+          Description=Authorized keys timer
+
+          [Timer]
+          OnBootSec=1min
+          OnUnitActiveSec=1min
+
+          [Install]
+          WantedBy=timers.target
+write_files:
+  - path: /etc/systemd/system/fleet.socket.d/30-ListenStream.conf
+    content: |
+      [Socket]
+      ListenStream=0.0.0.0:49153
+  - path: /etc/motd.d/env.conf
+    content: |
+            This enviroment is tagged as {{environment_tag}} and is cluster {{token}}
+  - path: /opt/bin/wupiao
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # [w]ait [u]ntil [p]ort [i]s [a]ctually [o]pen
+      [ -n "$1" ] && [ -n "$2" ] && while ! curl --output /dev/null \
+        --silent --head --fail \
+        http://${1}:${2}; do sleep 1 && echo -n .; done;
+      exit $?

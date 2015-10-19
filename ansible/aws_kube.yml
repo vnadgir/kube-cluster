@@ -1,0 +1,226 @@
+- hosts: localhost
+  connection: local
+
+  vars:
+    region: eu-west-1
+    ami: ami-eb97bc9c #eu-west-1 HMV 766.4.0 (stable)
+    #ami: ami-c3cae3b4 #eu-west-1 HMV CoreOS 815.0.0 (alpha)
+    description: "CoreOs cluster with Kubernetes"
+    env: "Development"
+  vars_files:
+    - keys.yaml
+
+  tasks:
+    - ec2_vpc:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        state: present
+        cidr_block: 172.24.0.0/16
+        resource_tags: {"Name": "coreos", "description": "CoreOS", "environment": "Development"}
+        subnets:
+          - cidr: 172.24.0.0/18
+            az:  "{{ region }}a"
+            resource_tags: {"Name": "coreos", "environment": "Development", "description": "CoreOS subnet A"}
+          - cidr: 172.24.64.0/18
+            az:  "{{ region }}b"
+            resource_tags: {"Name": "coreos", "environment": "Development", "description": "CoreOS subnet B"}
+        internet_gateway: True
+        route_tables:
+          - subnets:
+              - 172.24.0.0/18
+              - 172.24.64.0/18
+            routes:
+              - dest: 0.0.0.0/0
+                gw: igw
+      register: vpc
+
+    - debug: msg="VPC {{ vpc }}"
+
+    - name: Set up kubernetes security group
+      ec2_group:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        name: "coreos-dev-{{clusterid}}"
+        description: Kubernetes security group
+        vpc_id: "{{ vpc.vpc_id }}"
+        rules:
+          # Home
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 82.11.230.77
+          # Allow 80 from everywhere
+          - proto: tcp
+            from_port: 80
+            to_port: 80
+            cidr_ip: 0.0.0.0/0
+          # Allow 443 from everywhere
+          - proto: tcp
+            from_port: 443
+            to_port: 443
+            cidr_ip: 0.0.0.0/0
+          # Allow internal requests
+          - proto: tcp
+            from_port: 0
+            to_port: 65535
+            cidr_ip: 172.24.0.0/16
+        rules_egress:
+          # Allow outgoing to anywhere
+          - proto: tcp
+            from_port: 0
+            to_port: 65535
+            cidr_ip: 0.0.0.0/0
+          # Allow timesync/ntp out
+          - proto: udp
+            from_port: 123
+            to_port: 123
+            cidr_ip: 0.0.0.0/0
+      register: kubernetes-security-group
+
+    - name: Tag CoreOS security group
+      ec2_tag:
+        resource: "{{kubernetes-security-group.group_id}}"
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        state: present
+        tags:
+          Name: "coreos-{{clusterid}}"
+          env: "{{env}}"
+          description: "{{description}}"
+
+    - name: cluster-elb
+      ec2_elb_lb:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        name: "coreos-{{clusterid}}"
+        state: present
+        security_group_ids: '{{kubernetes-security-group.group_id}}'
+        subnets:
+          - "{{ vpc.subnets[0].id }}"
+          - "{{ vpc.subnets[1].id }}"
+        listeners:
+          - protocol: http
+            load_balancer_port: 80
+            instance_port: 8080
+        purge_listeners: True
+        health_check:
+          ping_protocol: tcp # options are http, https, ssl, tcp
+          ping_port: 8080
+          #ping_path: "/index.html" # not required for tcp or ssl
+          response_timeout: 5 # seconds
+          interval: 30 # seconds
+          unhealthy_threshold: 2
+          healthy_threshold: 10
+      register: cluster_elb
+
+    - name: tag ELB
+      shell: ". /.venv/bin/activate && aws --region {{region}} elb add-tags --load-balancer-names coreos-{{clusterid}} --tags Key=Name,Value=coreos-{{clusterid}} Key=env,Value={{env}} Key=description,Value={{description}}"
+
+    - debug: msg="cluster_elb dns {{ cluster_elb.elb.dns_name }}"
+
+    - name: Provision t2.micro instance for Kubernetes master
+      ec2:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        group: "coreos-{{clusterid}}"
+        image: "{{ami}}"
+        instance_type: t2.micro
+        wait: true
+        exact_count: 1
+        user_data: "{{ lookup('template', 'kube_master_user_data.yaml') }}"
+        vpc_subnet_id: "{{ vpc.subnets[0].id }}"
+        assign_public_ip: yes
+        volumes:
+          - device_name: /dev/xvda
+            volume_size: 5
+            delete_on_termination: true
+        count_tag:
+          Name: "efkube-master1-{{clusterid}}-caw1a-eu-d"
+        instance_tags:
+          Name: "efkube-master1-{{clusterid}}-caw1a-eu-d"
+          environment: "{{env}}"
+          description: "{{description}}"
+          stopSchedule: "nostop"
+
+    - name: Provision t2.micro instances
+      ec2:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        group: "coreos-{{clusterid}}"
+        image: "{{ami}}"
+        instance_type: t2.micro
+        wait: true
+        exact_count: 1
+        user_data: "{{ lookup('template', 'kube_minioin_user_data.yaml') }}"
+        vpc_subnet_id: "{{ vpc.subnets[0].id }}"
+        assign_public_ip: yes
+        volumes:
+          - device_name: /dev/xvda
+            volume_size: 5
+            delete_on_termination: true
+        count_tag:
+          Name: "efkube-svc1-{{clusterid}}-caw1a-eu-d"
+        instance_tags:
+          Name: "efkube-svc1-{{clusterid}}-caw1a-eu-d"
+          environment: "{{env}}"
+          description: "{{description}}"
+          stopSchedule: "nostop"
+
+    - name: Provision t2.micro instances
+      ec2:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        group: "coreos-{{clusterid}}"
+        image: "{{ami}}"
+        instance_type: t2.micro
+        wait: true
+        exact_count: 1
+        user_data: "{{ lookup('template', 'kube_minioin_user_data.yaml') }}"
+        vpc_subnet_id: "{{ vpc.subnets[1].id }}"
+        assign_public_ip: yes
+        volumes:
+          - device_name: /dev/xvda
+            volume_size: 5
+            delete_on_termination: true
+        count_tag:
+          Name: "efkube-svc2-{{clusterid}}-caw1b-eu-d"
+        instance_tags:
+          Name: "efkube-svc2-{{clusterid}}-caw1b-eu-d"
+          environment: "{{env}}"
+          description: "{{description}}"
+          stopSchedule: "nostop"
+
+    - set_fact:
+        persistent_tag: 1
+
+    - name: Provision t2.micro persistent instance
+      ec2:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        group: "coreos-{{clusterid}}"
+        image: "{{ami}}"
+        instance_type: t2.micro
+        wait: true
+        exact_count: 1
+        user_data: "{{ lookup('template', 'kube_minioin_persistence_user_data.yaml') }}"
+        vpc_subnet_id: "{{ vpc.subnets[0].id }}"
+        assign_public_ip: yes
+        volumes:
+          - device_name: /dev/xvda
+            volume_size: 5
+            delete_on_termination: true
+        count_tag:
+          Name: "efkube-per1-{{clusterid}}-caw1a-eu-d"
+        instance_tags:
+          Name: "efkube-per1-{{clusterid}}-caw1a-eu-d"
+          environment: "{{env}}"
+          description: "{{description}}"
+          stopSchedule: "nostop"
