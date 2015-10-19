@@ -85,6 +85,7 @@
         aws_secret_key: "{{ aws_secret_access_key }}"
         region: "{{region}}"
         state: present
+        key_name: eu-west-1
         tags:
           Name: "coreos-{{clusterid}}"
           env: "{{env}}"
@@ -128,13 +129,13 @@
         region: "{{region}}"
         group: "coreos-{{clusterid}}"
         image: "{{ami}}"
-        instance_type: t2.micro
+        instance_type: m3.medium
         wait: true
         exact_count: 1
         user_data: "{{ lookup('template', 'kube_master_user_data.yaml') }}"
         vpc_subnet_id: "{{ vpc.subnets[0].id }}"
         assign_public_ip: yes
-        private_ip: 172.24.0.1
+        private_ip: 172.24.1.112
         volumes:
           - device_name: /dev/xvda
             volume_size: 8
@@ -168,59 +169,6 @@
           Name: "efkube-svc1-{{clusterid}}-caw1a-eu-d"
         instance_tags:
           Name: "efkube-svc1-{{clusterid}}-caw1a-eu-d"
-          environment: "{{env}}"
-          description: "{{description}}"
-          stopSchedule: "nostop"
-
-    - name: Provision t2.micro instances
-      ec2:
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        region: "{{region}}"
-        group: "coreos-{{clusterid}}"
-        image: "{{ami}}"
-        instance_type: t2.micro
-        wait: true
-        exact_count: 1
-        user_data: "{{ lookup('template', 'kube_minion_user_data.yaml') }}"
-        vpc_subnet_id: "{{ vpc.subnets[1].id }}"
-        assign_public_ip: yes
-        volumes:
-          - device_name: /dev/xvda
-            volume_size: 8
-            delete_on_termination: true
-        count_tag:
-          Name: "efkube-svc2-{{clusterid}}-caw1b-eu-d"
-        instance_tags:
-          Name: "efkube-svc2-{{clusterid}}-caw1b-eu-d"
-          environment: "{{env}}"
-          description: "{{description}}"
-          stopSchedule: "nostop"
-
-    - set_fact:
-        persistent_tag: 1
-
-    - name: Provision t2.micro persistent instance
-      ec2:
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        region: "{{region}}"
-        group: "coreos-{{clusterid}}"
-        image: "{{ami}}"
-        instance_type: t2.micro
-        wait: true
-        exact_count: 1
-        user_data: "{{ lookup('template', 'kube_minion_persistence_user_data.yaml') }}"
-        vpc_subnet_id: "{{ vpc.subnets[0].id }}"
-        assign_public_ip: yes
-        volumes:
-          - device_name: /dev/xvda
-            volume_size: 8
-            delete_on_termination: true
-        count_tag:
-          Name: "efkube-per1-{{clusterid}}-caw1a-eu-d"
-        instance_tags:
-          Name: "efkube-per1-{{clusterid}}-caw1a-eu-d"
           environment: "{{env}}"
           description: "{{description}}"
           stopSchedule: "nostop"
