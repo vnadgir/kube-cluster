@@ -27,3 +27,9 @@ If you have Fleet installed locally, use this instead
 
 	ssh <public_ip_of_kube_master>
 	kubecfg list /minions
+	
+### TODO
+* Setup security groups so that ssh from home and work is enabled
+* use keypair to troubleshoot issues - (temporary fix)
+* An easy way to remove/delete all resources from AWS
+* Try using saltstack to set this up
