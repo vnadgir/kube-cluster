@@ -5,7 +5,7 @@
     region: eu-west-1
     ami: ami-eb97bc9c #eu-west-1 HMV 766.4.0 (stable)
     #ami: ami-c3cae3b4 #eu-west-1 HMV CoreOS 815.0.0 (alpha)
-    description: "CoreOs cluster with Kubernetes"
+    description: "CoreOsKubernetesCluster"
     env: "Development"
   vars_files:
     - keys.yaml
@@ -48,11 +48,6 @@
         rules:
           # Home
           - proto: tcp
-            from_port: 22
-            to_port: 22
-            cidr_ip: 82.11.230.77
-          # Allow 80 from everywhere
-          - proto: tcp
             from_port: 80
             to_port: 80
             cidr_ip: 0.0.0.0/0
@@ -77,11 +72,11 @@
             from_port: 123
             to_port: 123
             cidr_ip: 0.0.0.0/0
-      register: kubernetes-security-group
+      register: kubernetes_security_group
 
     - name: Tag CoreOS security group
       ec2_tag:
-        resource: "{{kubernetes-security-group.group_id}}"
+        resource: "{{kubernetes_security_group.group_id}}"
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
         region: "{{region}}"
@@ -98,7 +93,7 @@
         region: "{{region}}"
         name: "coreos-{{clusterid}}"
         state: present
-        security_group_ids: '{{kubernetes-security-group.group_id}}'
+        security_group_ids: '{{kubernetes_security_group.group_id}}'
         subnets:
           - "{{ vpc.subnets[0].id }}"
           - "{{ vpc.subnets[1].id }}"
@@ -137,7 +132,7 @@
         assign_public_ip: yes
         volumes:
           - device_name: /dev/xvda
-            volume_size: 5
+            volume_size: 8
             delete_on_termination: true
         count_tag:
           Name: "efkube-master1-{{clusterid}}-caw1a-eu-d"
@@ -157,12 +152,12 @@
         instance_type: t2.micro
         wait: true
         exact_count: 1
-        user_data: "{{ lookup('template', 'kube_minioin_user_data.yaml') }}"
+        user_data: "{{ lookup('template', 'kube_minion_user_data.yaml') }}"
         vpc_subnet_id: "{{ vpc.subnets[0].id }}"
         assign_public_ip: yes
         volumes:
           - device_name: /dev/xvda
-            volume_size: 5
+            volume_size: 8
             delete_on_termination: true
         count_tag:
           Name: "efkube-svc1-{{clusterid}}-caw1a-eu-d"
@@ -182,12 +177,12 @@
         instance_type: t2.micro
         wait: true
         exact_count: 1
-        user_data: "{{ lookup('template', 'kube_minioin_user_data.yaml') }}"
+        user_data: "{{ lookup('template', 'kube_minion_user_data.yaml') }}"
         vpc_subnet_id: "{{ vpc.subnets[1].id }}"
         assign_public_ip: yes
         volumes:
           - device_name: /dev/xvda
-            volume_size: 5
+            volume_size: 8
             delete_on_termination: true
         count_tag:
           Name: "efkube-svc2-{{clusterid}}-caw1b-eu-d"
@@ -210,12 +205,12 @@
         instance_type: t2.micro
         wait: true
         exact_count: 1
-        user_data: "{{ lookup('template', 'kube_minioin_persistence_user_data.yaml') }}"
+        user_data: "{{ lookup('template', 'kube_minion_persistence_user_data.yaml') }}"
         vpc_subnet_id: "{{ vpc.subnets[0].id }}"
         assign_public_ip: yes
         volumes:
           - device_name: /dev/xvda
-            volume_size: 5
+            volume_size: 8
             delete_on_termination: true
         count_tag:
           Name: "efkube-per1-{{clusterid}}-caw1a-eu-d"
