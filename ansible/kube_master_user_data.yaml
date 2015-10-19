@@ -121,6 +121,30 @@ coreos:
           ExecStart=/opt/bin/kube-scheduler --master=127.0.0.1:8080
           Restart=always
           RestartSec=10
+    - name: authorized_keys.service
+      command: start
+      content: |
+          [Unit]
+          Description=Update authorized_keys
+
+          [Service]
+          Type=oneshot
+          ExecStartPre=/bin/sh -c "mkdir -p /home/core/.ssh && touch /home/core/.ssh/authorized_keys"
+          ExecStart=/bin/sh -c "curl -sSL --retry 5 --retry-delay 2 -o /tmp/authorized_keys.sha512 https://raw.githubusercontent.com/vnadgir-ef/public-keys/master/authorized_keys.sha512"
+          ExecStart=/bin/sh -c "curl -sSL --retry 5 --retry-delay 2 -o /tmp/authorized_keys https://raw.githubusercontent.com/vnadgir-ef/public-keys/master/authorized_keys"
+          ExecStart=/bin/sh -c "cd /tmp/ && sha512sum -c authorized_keys.sha512 && cp authorized_keys /home/core/.ssh/authorized_keys && chmod 700 /home/core/.ssh && chmod 600 /home/core/.ssh/authorized_keys && chown -R core:core /home/core/.ssh"
+    - name: authorized_keys.timer
+      command: start
+      content: |
+          [Unit]
+          Description=Authorized keys timer
+
+          [Timer]
+          OnBootSec=1min
+          OnUnitActiveSec=1min
+
+          [Install]
+          WantedBy=timers.target
 write_files:
   - path: /etc/systemd/system/fleet.socket.d/30-ListenStream.conf
     content: |
