@@ -48,6 +48,10 @@
         rules:
           # Home
           - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 82.11.230.72/29
+          - proto: tcp
             from_port: 80
             to_port: 80
             cidr_ip: 0.0.0.0/0
@@ -130,6 +134,7 @@
         user_data: "{{ lookup('template', 'kube_master_user_data.yaml') }}"
         vpc_subnet_id: "{{ vpc.subnets[0].id }}"
         assign_public_ip: yes
+        private_ip: 172.24.0.1
         volumes:
           - device_name: /dev/xvda
             volume_size: 8

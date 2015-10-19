@@ -6,7 +6,7 @@ coreos:
   etcd2:
     listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
     advertise-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
-    initial-cluster: master=http://172.31.10.135:2380
+    initial-cluster: master=http://172.24.0.1:2380
     proxy: onfleet:
       metadata: "role=node"
     units:
@@ -54,7 +54,7 @@ coreos:
           # wait for kubernetes master to be up and ready
           ExecStartPre=/opt/bin/wupiao 172.31.10.135 8080
           ExecStart=/opt/bin/kube-proxy \
-          --master=172.31.10.135:8080 \
+          --master=172.24.0.1:8080 \
           --logtostderr=true
           Restart=always
           RestartSec=10
@@ -72,7 +72,7 @@ coreos:
           ExecStartPre=/usr/bin/curl -L -o /opt/bin/kubelet -z /opt/bin/kubelet https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kubelet
           ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet
           # wait for kubernetes master to be up and ready
-          ExecStartPre=/opt/bin/wupiao 172.31.10.135 8080
+          ExecStartPre=/opt/bin/wupiao 172.24.0.1 8080
           ExecStart=/opt/bin/kubelet \
           --address=0.0.0.0 \
           --port=10250 \
