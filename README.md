@@ -9,7 +9,7 @@ The user data files define the types of nodes that can be provisioned. User mana
 ## Provisioning a cluster
 	docker build -t="vnadgir/kube-cluster-provisioner" .
 
-	docker run --rm vnadgir/kube-cluster-provisioner
+	docker run --rm -e "AWS_ACCESS_KEY_ID=<YOUR_AWS_ACCESS_KEY_ID>" -e "AWS_SECRET_ACCESS_KEY=<YOUR_AWS_SECRET_ACCESS_KEY>" -e "VAULT_PASS=<YOUR_VAULT_PASSWORD>" vnadgir/kube-cluster-provisioner 
 	
 	
 ## Testing if the provision worked
