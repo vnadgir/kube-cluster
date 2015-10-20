@@ -87,6 +87,8 @@
             cidr_ip: 0.0.0.0/0
       register: kubernetes_security_group
 
+    - debug: msg="kubernetes_security_group {{ kubernetes_security_group }}"
+
     - name: Tag CoreOS security group
       ec2_tag:
         resource: "{{kubernetes_security_group.group_id}}"
