@@ -7,8 +7,6 @@
     #ami: ami-c3cae3b4 #eu-west-1 HMV CoreOS 815.0.0 (alpha)
     description: "CoreOsKubernetesCluster"
     env: "Development"
-  vars_files:
-    - keys.yaml
 
   tasks:
     - ec2_vpc:
@@ -43,7 +41,7 @@
         aws_secret_key: "{{ aws_secret_access_key }}"
         region: "{{region}}"
         name: "coreos-dev-{{clusterid}}"
-        description: Kubernetes security group
+        description: Kubernetes security group {{clusterid}}
         vpc_id: "{{ vpc.vpc_id }}"
         rules:
           # Home
@@ -51,6 +49,17 @@
             from_port: 22
             to_port: 22
             cidr_ip: 82.11.230.72/29
+          # Jumpbox
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 172.31.0.0/16
+          # Office
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: {{office_cidr}}
+          # Allow 80 from everywhere
           - proto: tcp
             from_port: 80
             to_port: 80
@@ -110,7 +119,6 @@
         health_check:
           ping_protocol: tcp # options are http, https, ssl, tcp
           ping_port: 8080
-          #ping_path: "/index.html" # not required for tcp or ssl
           response_timeout: 5 # seconds
           interval: 30 # seconds
           unhealthy_threshold: 2
@@ -122,6 +130,31 @@
 
     - debug: msg="cluster_elb dns {{ cluster_elb.elb.dns_name }}"
 
+    - name: Provision t2.micro instance for checking if ssh keys, security groups, route_tables etc work
+      ec2:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{region}}"
+        group: "coreos-{{clusterid}}"
+        image: "{{ami}}"
+        instance_type: t2.micro
+        wait: true
+        exact_count: 1
+        user_data: "{{ lookup('template', 'simple_user_data.yaml') }}"
+        vpc_subnet_id: "{{ vpc.subnets[0].id }}"
+        assign_public_ip: yes
+        volumes:
+          - device_name: /dev/xvda
+            volume_size: 8
+            delete_on_termination: true
+        count_tag:
+          Name: "simple-{{clusterid}}-caw1a-eu-d"
+        instance_tags:
+          Name: "simple-{{clusterid}}-caw1a-eu-d"
+          environment: "{{env}}"
+          description: "{{description}}"
+          stopSchedule: "nostop"
+
     - name: Provision t2.micro instance for Kubernetes master
       ec2:
         aws_access_key: "{{ aws_access_key_id }}"
@@ -129,7 +162,7 @@
         region: "{{region}}"
         group: "coreos-{{clusterid}}"
         image: "{{ami}}"
-        instance_type: m3.medium
+        instance_type: t2.micro
         wait: true
         exact_count: 1
         user_data: "{{ lookup('template', 'kube_master_user_data.yaml') }}"
