@@ -130,31 +130,6 @@
 
     - debug: msg="cluster_elb dns {{ cluster_elb.elb.dns_name }}"
 
-    - name: Provision t2.micro instance for checking if ssh keys, security groups, route_tables etc work
-      ec2:
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        region: "{{region}}"
-        group: "coreos-{{clusterid}}"
-        image: "{{ami}}"
-        instance_type: t2.micro
-        wait: true
-        exact_count: 1
-        user_data: "{{ lookup('template', 'simple_user_data.yaml') }}"
-        vpc_subnet_id: "{{ vpc.subnets[0].id }}"
-        assign_public_ip: yes
-        volumes:
-          - device_name: /dev/xvda
-            volume_size: 8
-            delete_on_termination: true
-        count_tag:
-          Name: "simple-{{clusterid}}-caw1a-eu-d"
-        instance_tags:
-          Name: "simple-{{clusterid}}-caw1a-eu-d"
-          environment: "{{env}}"
-          description: "{{description}}"
-          stopSchedule: "nostop"
-
     - name: Provision t2.micro instance for Kubernetes master
       ec2:
         aws_access_key: "{{ aws_access_key_id }}"
@@ -181,7 +156,7 @@
           description: "{{description}}"
           stopSchedule: "nostop"
 
-    - name: Provision t2.micro instances
+    - name: Provision t2.micro instances for minions
       ec2:
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
