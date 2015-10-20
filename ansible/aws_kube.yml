@@ -94,7 +94,6 @@
         aws_secret_key: "{{ aws_secret_access_key }}"
         region: "{{region}}"
         state: present
-        key_name: eu-west-1
         tags:
           Name: "coreos-{{clusterid}}"
           env: "{{env}}"
