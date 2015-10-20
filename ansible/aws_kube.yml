@@ -58,7 +58,7 @@
           - proto: tcp
             from_port: 22
             to_port: 22
-            cidr_ip: {{office_cidr}}
+            cidr_ip: 64.208.179.131/30
           # Allow 80 from everywhere
           - proto: tcp
             from_port: 80
