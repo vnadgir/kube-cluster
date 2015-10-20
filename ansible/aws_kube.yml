@@ -134,7 +134,7 @@
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
         region: "{{region}}"
-        group: "coreos-{{clusterid}}"
+        group: "{{kubernetes_security_group.group_id}}"
         image: "{{ami}}"
         instance_type: t2.micro
         wait: true
@@ -160,7 +160,7 @@
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
         region: "{{region}}"
-        group: "coreos-{{clusterid}}"
+        group: "{{kubernetes_security_group.group_id}}"
         image: "{{ami}}"
         instance_type: t2.micro
         wait: true
